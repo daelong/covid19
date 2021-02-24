@@ -1,18 +1,22 @@
 <template>
   <div class="main" id="app">
     <div class="change-day">
-      <button @click="setDate('yesterday')">&lt;</button>
-      <div>{{state.currentDay}}</div>
-      <button @click="setDate('tomorrow')">&gt;</button>
+      <button @click="changeDate('back')">&lt;</button>
+      <div>{{startDate}}</div>
+      <button @click="changeDate('front')">&gt;</button>
+      <div>
+          <input type="radio" id="contactChoice1" value="day" v-model="sortType"  checked="checked" >
+          <label for="contactChoice1">일일</label>
+          <input type="radio" id="contactChoice2" value="week" v-model="sortType" >
+          <label for="contactChoice2">주간</label>
+          <input type="radio" id="contactChoice3" value="month" v-model="sortType" >
+          <label for="contactChoice3">월간</label>
+          {{startDate}} ~ {{endDate}}
+      </div>
     </div>
     <div>
       <h1>chart of local new confirmed person</h1>
-      <apexchart
-        width="1000"
-        type="bar"
-        :options="{ ...state.chartOptions}"
-        :series="state.series"
-      ></apexchart>
+      <canvas id="corona-chart"></canvas>
     </div>
     <table>
       <thead>
@@ -33,19 +37,64 @@
 
 <script>
 import API from './assets/scripts/api';
-// import BarChart from './components/BarChart';
-import { reactive, onMounted, computed } from 'vue';
-import VueApexCharts from "vue3-apexcharts";
+import { reactive, onMounted, onBeforeUpdate, ref, watch } from 'vue';
 import moment from 'moment';
+import coronaData from './components/CoronaData.js';
+import Chart from 'chart.js';
+
 export default {
   name: 'App',
-  components: {
-    // BarChart,
-    apexchart: VueApexCharts,
-    // BarChart
-  },
   setup(){
-    const state = reactive({
+    const sortType = ref('day');
+    const endDate = ref(moment().format('YYYYMMDD'));
+    const startDate = ref(moment().format('YYYYMMDD'));
+    const changeToday = ref(0);
+     watch(sortType, () => {
+      console.log(endDate.value);
+      endDate.value = moment().format('YYYYMMDD');
+      changeToday.value = 0;
+      if(sortType.value === 'day'){
+        startDate.value = moment().clone().startOf('day').format('YYYYMMDD');
+        fetchData();
+      }else if(sortType.value === 'week'){
+        startDate.value = moment().clone().startOf('week').format('YYYYMMDD');
+        avgFetchData();
+      }else{
+        startDate.value = moment().clone().startOf('month').format('YYYYMMDD');
+        avgFetchData();
+      }
+    })
+    const changeDate = (check) => {
+      if(check === 'back'){
+        changeToday.value -= 1;
+      }else{
+        changeToday.value += 1;
+      } 
+      if(sortType.value === 'day'){
+        startDate.value = moment().add(changeToday.value, 'days').format('YYYYMMDD');
+        endDate.value = moment().add(changeToday.value, 'days').format('YYYYMMDD');
+        fetchData();
+      }else if(sortType.value === 'week'){
+        startDate.value = moment().add(changeToday.value, 'weeks').startOf('week').format('YYYYMMDD');
+        if(moment().add(changeToday.value, 'weeks').endOf('week').format('YYYYMMDD') < moment().format('YYYYMMDD')){
+          endDate.value = moment().add(changeToday.value, 'weeks').endOf('week').format('YYYYMMDD');
+        }else{
+          endDate.value = moment().format('YYYYMMDD')
+        }
+        avgFetchData();
+      }else{
+        startDate.value = moment().add(changeToday.value, 'months').startOf('month').format('YYYYMMDD');
+        if(moment().add(changeToday.value, 'months').endOf('month').format('YYYYMMDD') < moment().format('YYYYMMDD')){
+          endDate.value = moment().add(changeToday.value, 'months').endOf('month').format('YYYYMMDD');
+        }else{
+          endDate.value = moment().format('YYYYMMDD')
+        }
+        avgFetchData();
+      }
+      
+    }
+
+    const state = reactive({  
       items: [],
       columns: [
         {
@@ -69,57 +118,61 @@ export default {
           text: '격리중인환자수'
         }
       ],
-      labels: [],
-      dataset: [],
-      chartOptions: {
-        chart: {
-          id: "vuechart-example",
-        },
-        xaxis: {
-          categories: computed(() => state.labels),
-        },
-      },
-      series: [
-        {
-          name: "신규 확진자",
-          data: computed(() => state.dataset),
-        },
-      ],
-      currentDay: moment().format('YYYYMMDD'),
+      coronaData: {}, 
     })
     onMounted(() => {
       fetchData();
     })
+    onBeforeUpdate(() => {
+      createChart('corona-chart', state.coronaData);
+    })
     let response = null;
-    const fetchData = async () =>{
-      response = await API.fetchAPI(state.currentDay, state.currentDay);
+    const fetchData = async () =>{ 
+      response = await API.fetchAPI(startDate.value, endDate.value);
       state.items = response.data.response.body.items.item;
-      console.log(state.items);
-      state.labels = state.items.map(data => data.gubun);
-      state.dataset = state.items.map(data => data.localOccCnt);
+      coronaData.data.labels = state.items.map(data => data.gubun);
+      coronaData.data.datasets[0].data = state.items.map(data => data.localOccCnt);
+      // console.log(coronaData);
+      state.coronaData = coronaData;
     }
-    let newDay = 0;
-    const setDate = (check) => {
-      if(check === 'yesterday'){
-        newDay -= 1;
-        state.currentDay = moment().subtract(Math.abs(newDay), 'days').format('YYYYMMDD');
-        console.log(newDay);
-        fetchData();
-      }else{
-        newDay += 1;
-        if(newDay < 0){
-          state.currentDay = moment().subtract(Math.abs(newDay), 'days').format('YYYYMMDD');  
-        }else{
-          state.currentDay = moment().add(Math.abs(newDay), 'days').format('YYYYMMDD');
-        }
-        console.log(newDay);
-        fetchData();
+
+    const avgFetchData = async() => {
+      response = await API.fetchAPI(startDate.value, endDate.value);
+      state.items = response.data.response.body.items.item;
+      let a = [];
+      let computedDate = state.items.length/19;
+      for(let i = 0; i < 19; i++){
+        a.push(state.items.filter(res => res.gubun === state.items[i].gubun)) 
       }
+      for(let i = 0; i < a.length; i++){  
+        a[i] = { gubun: a[i][0].gubun, incDec: 0, localOccCnt: Math.floor(a[i].reduce((prev, curr) => prev+curr.localOccCnt, 0)/computedDate), deathCnt: Math.floor(a[i].reduce((prev, curr) => prev+curr.deathCnt, 0)/computedDate), isolIngCnt: Math.floor(a[i].reduce((prev, curr) => prev+curr.isolIngCnt, 0)/computedDate) };
+      }
+      state.items = a;
+      coronaData.data.labels = state.items.map(data => data.gubun);
+      coronaData.data.datasets[0].data = state.items.map(data => data.localOccCnt);
+      // console.log(coronaData);
+      state.coronaData = coronaData;
     }
+    const createChart = (chartId, chartData) => {
+      const ctx = document.getElementById(chartId);
+      new Chart(ctx, {
+        type: chartData.type,
+        data: chartData.data,
+        options: chartData.options,
+      });
+    }
+
     return {
+      sortType,
+      startDate,
+      endDate,
       state,
       fetchData,
-      setDate
+      avgFetchData,
+      createChart,
+      changeToday,
+      changeDate,
+      // changeType
     }
   }
 };

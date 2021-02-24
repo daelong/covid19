@@ -1,7 +1,8 @@
 import axios from 'axios';
 
 const BASE_URL = '/openapi/service/rest/Covid19/getCovid19SidoInfStateJson';
-const serviceKey = 'MoBGJRgx2xQcXOqyvajr62z%2F1Q8%2BZLLuPtbHbAe%2FecewK39pn%2BC%2BrrzLVdFy1Xb4KNsa4BERX7r7KDHcy9IvBA%3D%3D';
+const serviceKey = 'vxPgmuyk8RjEAKYmxwSjUttyVb%2BD67rI3WeLBDBrhRhdcEzy1fjW9tMVNqkAUNSLAJYT0VJ1ju%2BElfGGrrUUDg%3D%3D';
+//MoBGJRgx2xQcXOqyvajr62z%2F1Q8%2BZLLuPtbHbAe%2FecewK39pn%2BC%2BrrzLVdFy1Xb4KNsa4BERX7r7KDHcy9IvBA%3D%3D
 
 const API = {
     fetchAPI(startCreateDt = 20210204, endCreateDt = 20210204){
